@@ -83,4 +83,4 @@ np.save('newcam_mtx.npy', newCameraMatrix)
 
 img = cv.imread('data/image0.png')
 dst = cv.undistort(img, cameraMatrix, dist, None, newCameraMatrix)
-cv.imwrite('calibresult.png', dst)
+#cv.imwrite('calibresult.png', dst)

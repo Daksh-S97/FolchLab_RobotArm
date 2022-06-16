@@ -107,3 +107,42 @@ def find_contours(frame: np.ndarray, eps: float = 20) -> tuple:
             sorted_contours.append(contour)
 
     return (a,b,r,sorted_contours)
+
+def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
+    """Function computes the transformation matrix between real-world
+    coordinates and pixel coordinates in an image.
+
+    Args:
+        mm2pix_dict (dict): Dictionary mapping real-world coordinates
+        to pixel coordinates. Example for four points:
+        {(382.76, -113.37): (499, 412),
+        (225.27, 94.68): (240, 103),
+        (386.5, 91.55): (492, 98),
+        (221.25, -110.62): (248, 419)}
+        
+    Returns:
+        np.ndarray: array that represents the transformation matrix.
+    """    
+    A = np.zeros((2 * len(mm2pix_dict), 6), dtype=float)
+    b = np.zeros((2 * len(mm2pix_dict), 1), dtype=float)
+    index = 0
+    for XY, xy in mm2pix_dict.items():
+        X = XY[0]
+        Y = XY[1]
+        x = xy[0]
+        y = xy[1]
+        A[2 * index, 0] = x
+        A[2 * index, 1] = y
+        A[2 * index, 2] = 1
+        A[2 * index + 1, 3] = x
+        A[2 * index + 1, 4] = y
+        A[2 * index + 1, 5] = 1
+        b[2 * index, 0] = X
+        b[2 * index + 1, 0] = Y
+        index += 1
+    x, residuals, rank, singular_values = np.linalg.lstsq(A, b, rcond=None)
+    tf_mtx = np.zeros((3,3))
+    tf_mtx[0,:] = np.squeeze(x[:3])
+    tf_mtx[1,:] = np.squeeze(x[3:])
+    tf_mtx[-1,-1] = 1
+    return tf_mtx

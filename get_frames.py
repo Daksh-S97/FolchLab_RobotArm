@@ -20,6 +20,8 @@ while True:
         # Put whatever directory is convenient for you.
         cv2.imwrite('data/image' +
                     str(num) + '.png', frame)
+        # cv2.imwrite('image'+
+        #     str(num) + '.png', frame)
         print("images saved!")
         num += 1
     # Displaying the capture in a single window, more convenient.
