@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
 # Input the chessboard parameters,
 chessboardSize = (9, 7)
-frameSize = (1024, 768)
+frameSize = (1600, 1200)
 
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -18,13 +18,13 @@ objp[:, :2] = np.mgrid[0:chessboardSize[0],
 
 
 # Input chess square size.
-size_of_chessboard_squares_mm = 20.5
+size_of_chessboard_squares_mm = 18
 objp = objp * size_of_chessboard_squares_mm
 
 objpoints = []
 imgpoints = []
 
-images = sorted(glob.glob('marked/image*.png'))
+images = sorted(glob.glob('camera_data/raw/*.png'))
 
 for idx, image in enumerate(images):
 
@@ -53,7 +53,7 @@ for idx, image in enumerate(images):
 
         # Draw and display the corners
         cv.drawChessboardCorners(img, chessboardSize, cornersL, ret)
-        cv.imshow('hmmm', img)
+        cv.imshow('Calibration', img)
         cv.waitKey(2000)
     idx += 1
 cv.destroyAllWindows()
@@ -67,20 +67,20 @@ newCameraMatrix, roi = cv.getOptimalNewCameraMatrix(
 
 print("Camera Matrix")
 print(cameraMatrix)
-np.save('cam_mtx.npy', cameraMatrix)
+np.save('cam_matrices/cam_mtx.npy', cameraMatrix)
 
 print("Distortion Coeff")
 print(dist)
-np.save('dist.npy', dist)
+np.save('cam_matrices/dist.npy', dist)
 
 print("Region of Interest")
 print(roi)
-np.save('roi.npy', roi)
+np.save('cam_matrices/roi.npy', roi)
 
 print("New Camera Matrix")
 print(newCameraMatrix)
-np.save('newcam_mtx.npy', newCameraMatrix)
+np.save('cam_matrices/newcam_mtx.npy', newCameraMatrix)
 
-img = cv.imread('data/image0.png')
-dst = cv.undistort(img, cameraMatrix, dist, None, newCameraMatrix)
+# img = cv.imread('data/image0.png')
+# dst = cv.undistort(img, cameraMatrix, dist, None, newCameraMatrix)
 #cv.imwrite('calibresult.png', dst)

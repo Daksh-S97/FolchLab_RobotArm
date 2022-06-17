@@ -67,3 +67,5 @@ def get_pose(dash) -> np.ndarray:
     coords = [float(coord) for coord in coords[:4]]
     print(f'X = {coords[0]}\nY = {coords[1]}\nZ = {coords[2]}\nr = {coords[3]}')
     return np.array(coords)
+
+default_pos = lambda move: move.JointMovJ(0,0,0,0)

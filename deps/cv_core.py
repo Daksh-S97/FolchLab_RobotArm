@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pandas as pd
+import glob
 
 def camera_res(camera_idx: int = 0) -> dict: 
     """Function checks which resolutions work with the current camera.
@@ -54,59 +55,81 @@ def set_res(cap: cv2.VideoCapture, res: tuple) -> cv2.VideoCapture:
     cap.set(4, res[1])
     return cap
 
-def find_contours(frame: np.ndarray, eps: float = 20) -> tuple:
-    """General contour finding pipeline of objects inside a circular contour. In our case
-    we are looking for objects in a Petri dish.
-
-    Args:
-        frame (np.ndarray): frame taken from camera cap, or just an image.
-        eps (float, optional): Contour size threshold. Defaults to 20.
-
-    Returns:
-        tuple: tuple of circle parameters and contours found in the Petri dish.
-    """     
-
-    #Convert image to grayscale:
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    #Normalize the image:
-    nimg = cv2.normalize(gray, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    #Apply a little gaussian blur:
-    blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
-    blurred2 = cv2.blur(gray, (3, 3))
-    #Apply binary thresholding:
-    (T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
-    #Detect circles to find the petri dish edges.
-    detected_circles = cv2.HoughCircles(image=blurred2, 
-                            method=cv2.HOUGH_GRADIENT, 
-                            dp=1.2, 
-                            minDist=10,
-                            param1=50,
-                            param2=50,
-                            minRadius=200,
-                            maxRadius=300                           
-                            )
-
-    if detected_circles is not None:
-        # Convert the circle parameters a, b and r to integers.
-        detected_circles = np.uint16(np.around(detected_circles))
-        pt = detected_circles[0][0]
-        a, b, r = pt[0], pt[1], pt[2]
-
+def mask_frame(frame, pt):
+    a,b,r = pt
     #Create mask to isolate the information in the petri dish.
     mask = np.zeros_like(frame)
-    mask = cv2.circle(mask, (a,b), r-25, (255,255,255), -1)
-    mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    mask = cv2.circle(mask, (a,b), r-15, (255,255,255), -1)
+    #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     #Apply the mask to the image.
-    result = cv2.bitwise_and(thresh.astype('uint8'), mask)
-    #Find all the contours in the resulting image.
-    contours, hierarchy = cv2.findContours(result,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    #We want to apply a size threshold to the contours.
-    sorted_contours = []
-    for contour in contours:
-        if cv2.contourArea(contour) > eps:
-            sorted_contours.append(contour)
+    result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
+    return result
 
-    return (a,b,r,sorted_contours)
+class Contours():
+    def __init__(self) -> None:   
+        self.best_circ = None
+
+    def get_circles(self, frame: np.ndarray):
+        blurred = cv2.blur(frame, (7, 7))
+
+        detected_circles = cv2.HoughCircles(image=blurred, 
+                        method=cv2.HOUGH_GRADIENT, 
+                        dp=1.2, 
+                        minDist=10,
+                        param1=50,
+                        param2=50,
+                        minRadius=200,
+                        maxRadius=300                           
+                        )
+
+        if detected_circles is not None:
+            # Convert the circle parameters a, b and r to integers.
+            detected_circles = np.uint16(np.around(detected_circles))
+            pt = detected_circles[0][0]
+            a,b,r = pt
+            if self.best_circ is None or r < self.best_circ[2]:
+                self.best_circ = pt
+
+            best_center = np.array(self.best_circ[:2])
+            curr_center = np.array([a,b])
+            #print(best_center, curr_center, np.sqrt(np.sum((best_center - curr_center)**2)))
+            if np.sqrt(np.sum((best_center - curr_center)**2)) > 10:
+                self.best_circ = pt
+
+    def find_contours(self, frame: np.ndarray, eps: float = 20) -> tuple:
+        """General contour finding pipeline of objects inside a circular contour. In our case
+        we are looking for objects in a Petri dish.
+
+        Args:
+            frame (np.ndarray): frame taken from camera cap, or just an image.
+            eps (float, optional): Contour size threshold. Defaults to 20.
+
+        Returns:
+            tuple: tuple of circle parameters and contours found in the Petri dish.
+        """     
+
+        #Convert image to grayscale:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        #Normalize the image:
+        nimg = cv2.normalize(gray, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        #Apply a little gaussian blur:
+        blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
+        # blurred2 = cv2.blur(gray, (7, 7))
+        #Apply binary thresholding:
+        (T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
+
+        self.get_circles(gray)
+        result = mask_frame(thresh, self.best_circ)
+
+        #Find all the contours in the resulting image.
+        contours, hierarchy = cv2.findContours(result,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        #We want to apply a size threshold to the contours.
+        sorted_contours = []
+        for contour in contours:
+            if cv2.contourArea(contour) > eps:
+                sorted_contours.append(contour)
+
+        return (self.best_circ, sorted_contours)
 
 def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
     """Function computes the transformation matrix between real-world
@@ -146,3 +169,62 @@ def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
     tf_mtx[1,:] = np.squeeze(x[3:])
     tf_mtx[-1,-1] = 1
     return tf_mtx
+
+def cam_calibration(chessboardSize: tuple = (9,7), frameSize: tuple = (1024, 768),
+                    squares_sz_mm: float = 20.5, raw_path: str = '../camera_data/raw/'
+                    ):
+    ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
+    # Input the chessboard parameters,
+
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+
+    # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
+    objp = np.zeros((chessboardSize[0] * chessboardSize[1], 3), np.float32)
+    objp[:, :2] = np.mgrid[0:chessboardSize[0],
+                        0:chessboardSize[1]].T.reshape(-1, 2)
+
+    objp = objp * squares_sz_mm
+
+    objpoints = []
+    imgpoints = []
+
+    images = sorted(glob.glob(raw_path+'image*.png'))
+
+    for idx, image in enumerate(images):
+
+        img = cv2.imread(image)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Find the chess board corners
+        # If the findChessboardCorners() doesn't work well for you, try the
+        # findChessboardCornersSB() alternative. Sometimes it proves to be more
+        # robust.
+        ret, corners = cv2.findChessboardCorners(gray, chessboardSize, None)
+
+        # Check if the algorithm detected any chessboard in the image.
+        # If either one of the images gives false, the pair will not be considered
+        # for recognition of the corners.
+        print(f'i = {idx}, res = {ret}')
+
+        # If found, add object points, image points (after refining them)
+        if ret == True:
+
+            objpoints.append(objp)
+
+            cornersL = cv2.cornerSubPix(
+                gray, corners, (11, 11), (-1, -1), criteria)
+            imgpoints.append(cornersL)
+
+            # Draw and display the corners
+            cv2.drawChessboardCorners(img, chessboardSize, cornersL, ret)
+            cv2.imshow('Corners', img)
+            cv2.waitKey(2000)
+        idx += 1
+    cv2.destroyAllWindows()
+
+    ret, cameraMatrix, dist, rvecs, tvecs = cv2.calibrateCamera(
+        objpoints, imgpoints, frameSize, None, None)
+    height, width, channels = img.shape
+    newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(
+        cameraMatrix, dist, (width, height), 1, (width, height))
