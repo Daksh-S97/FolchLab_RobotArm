@@ -3,95 +3,90 @@ import numpy as np
 import pandas as pd
 import glob
 
-def camera_res(camera_idx: int = 0) -> dict: 
-    """Function checks which resolutions work with the current camera.
-
-    Args:
-        camera_idx (int, optional): Index of the camera. Defaults to 0.
-
-    Returns:
-        dict: Dictionary with resolutions as keys, and bool status as values.
-    """    
-    url = "https://en.wikipedia.org/wiki/List_of_common_resolutions"
-    table = pd.read_html(url)[0]
-    table.columns = table.columns.droplevel()
-    cap = cv2.VideoCapture(camera_idx)
-    resolutions = {}
-    for index, row in table[["W", "H"]].iterrows():
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, row["W"])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, row["H"])
-        width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        resolutions[str(width)+"x"+str(height)] = "OK"
-    return resolutions
-
-def video_test(cap: cv2.VideoCapture) -> None:
-    """Function for testing the video stream from the current camera. Useful when
-    Camera focal length and positions need to be adjusted.
-
-    Args:
-        cap (cv2.VideoCapture): video capture object.
-    """
-    while(True):
-        ret, frame = cap.read()
-        cv2.imshow('frame', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-            
-    cap.release()
-    cv2.destroyAllWindows()
-
-def set_res(cap: cv2.VideoCapture, res: tuple) -> cv2.VideoCapture:
-    """Function to set the resolution of the video capture object.
-
-    Args:
-        cap (cv2.VideoCapture): video capture object.
-        res (tuple): resolution tuple, like (1024, 768), etc.
-
-    Returns:
-        cv2.VideoCapture: modified video capture object.
-    """    
-    cap.set(3, res[0])
-    cap.set(4, res[1])
-    return cap
-
-def mask_frame(frame, pt):
-    a,b,r = pt
-    #Create mask to isolate the information in the petri dish.
-    mask = np.zeros_like(frame)
-    mask = cv2.circle(mask, (a,b), r-15, (255,255,255), -1)
-    #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-    #Apply the mask to the image.
-    result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
-    return result
 
 class Contours():
-    def __init__(self) -> None:   
+    def __init__(self) -> None:
         self.best_circ = None
+
+    def contour_centers(self, contours):
+        centers = []
+        for contour in contours:
+            M = cv2.moments(contour)
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            centers.append((cX, cY))
+        return centers
+
+    def filter_contours(self, contours: tuple, eps: int = 30) -> list:
+        """Function filteres the inputed contours to be bigger than size eps.
+
+        Args:
+            contours (tuple): A tuple of contours to be filtered, normally outputed 
+            by cv2.findContours() function.
+            eps (int, optional): Threshold for the size of the contours. Defaults to 30.
+
+        Returns:
+            list: Outputs list of contours with size greater than eps.
+        """    
+        filtered_contours = []
+        for contour in contours:
+            if cv2.contourArea(contour) > eps:
+                filtered_contours.append(contour)
+        return filtered_contours
+
+    def find_anchors(self, frame: np.ndarray):
+
+        img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        mask1 = cv2.inRange(img_hsv, (0,50,20), (5,255,255))
+        mask2 = cv2.inRange(img_hsv, (175,50,20), (180,255,255))
+        mask = cv2.bitwise_or(mask1, mask2)
+        kernel = np.ones((3,3),np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+        contours, hierarchy = cv2.findContours(
+                mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        filtered_contours = self.filter_contours(contours)
+        return filtered_contours
+
+    def wait_for_anchors(self, cap: cv2.VideoCapture, num_anhors: int = 4, show: bool = False):
+        while True:
+            ret, frame = cap.read()
+            anchors = self.find_anchors(frame)
+            cv2.drawContours(frame, anchors, -1,(0,255, 0),2)
+            cv2.namedWindow('Anchors', cv2.WINDOW_NORMAL)
+            cv2.imshow('Anchors', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+  
+        cv2.destroyAllWindows()
+        centers = self.contour_centers(anchors)
+        return centers
 
     def get_circles(self, frame: np.ndarray):
         blurred = cv2.blur(frame, (7, 7))
 
-        detected_circles = cv2.HoughCircles(image=blurred, 
-                        method=cv2.HOUGH_GRADIENT, 
-                        dp=1.2, 
-                        minDist=10,
-                        param1=50,
-                        param2=50,
-                        minRadius=200,
-                        maxRadius=300                           
-                        )
+        detected_circles = cv2.HoughCircles(image=blurred,
+                                            method=cv2.HOUGH_GRADIENT,
+                                            dp=1.2,
+                                            minDist=10,
+                                            param1=50,
+                                            param2=50,
+                                            minRadius=0,
+                                            maxRadius=300
+                                            )
 
         if detected_circles is not None:
             # Convert the circle parameters a, b and r to integers.
             detected_circles = np.uint16(np.around(detected_circles))
             pt = detected_circles[0][0]
-            a,b,r = pt
+            a, b, r = pt
             if self.best_circ is None or r < self.best_circ[2]:
                 self.best_circ = pt
 
             best_center = np.array(self.best_circ[:2])
-            curr_center = np.array([a,b])
+            curr_center = np.array([a, b])
             #print(best_center, curr_center, np.sqrt(np.sum((best_center - curr_center)**2)))
             if np.sqrt(np.sum((best_center - curr_center)**2)) > 10:
                 self.best_circ = pt
@@ -106,30 +101,99 @@ class Contours():
 
         Returns:
             tuple: tuple of circle parameters and contours found in the Petri dish.
-        """     
+        """
 
-        #Convert image to grayscale:
+        # Convert image to grayscale:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        #Normalize the image:
-        nimg = cv2.normalize(gray, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-        #Apply a little gaussian blur:
+        # Normalize the image:
+        nimg = cv2.normalize(gray, None, alpha=0, beta=1,
+                             norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        # Apply a little gaussian blur:
         blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
         # blurred2 = cv2.blur(gray, (7, 7))
-        #Apply binary thresholding:
+        # Apply binary thresholding:
         (T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
 
         self.get_circles(gray)
         result = mask_frame(thresh, self.best_circ)
 
-        #Find all the contours in the resulting image.
-        contours, hierarchy = cv2.findContours(result,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        #We want to apply a size threshold to the contours.
+        # Find all the contours in the resulting image.
+        contours, hierarchy = cv2.findContours(
+            result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # We want to apply a size threshold to the contours.
         sorted_contours = []
         for contour in contours:
             if cv2.contourArea(contour) > eps:
                 sorted_contours.append(contour)
 
         return (self.best_circ, sorted_contours)
+
+
+def camera_res(camera_idx: int = 0) -> dict:
+    """Function checks which resolutions work with the current camera.
+
+    Args:
+        camera_idx (int, optional): Index of the camera. Defaults to 0.
+
+    Returns:
+        dict: Dictionary with resolutions as keys, and bool status as values.
+    """
+    url = "https://en.wikipedia.org/wiki/List_of_common_resolutions"
+    table = pd.read_html(url)[0]
+    table.columns = table.columns.droplevel()
+    cap = cv2.VideoCapture(camera_idx)
+    resolutions = {}
+    for index, row in table[["W", "H"]].iterrows():
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, row["W"])
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, row["H"])
+        width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        resolutions[str(width)+"x"+str(height)] = "OK"
+    return resolutions
+
+
+def video_test(cap: cv2.VideoCapture) -> None:
+    """Function for testing the video stream from the current camera. Useful when
+    Camera focal length and positions need to be adjusted.
+
+    Args:
+        cap (cv2.VideoCapture): video capture object.
+    """
+    while(True):
+        ret, frame = cap.read()
+        cv2.imshow('frame', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def set_res(cap: cv2.VideoCapture, res: tuple) -> cv2.VideoCapture:
+    """Function to set the resolution of the video capture object.
+
+    Args:
+        cap (cv2.VideoCapture): video capture object.
+        res (tuple): resolution tuple, like (1024, 768), etc.
+
+    Returns:
+        cv2.VideoCapture: modified video capture object.
+    """
+    cap.set(3, res[0])
+    cap.set(4, res[1])
+    return cap
+
+
+def mask_frame(frame, pt):
+    a, b, r = pt
+    # Create mask to isolate the information in the petri dish.
+    mask = np.zeros_like(frame)
+    mask = cv2.circle(mask, (a, b), r-15, (255, 255, 255), -1)
+    #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+    # Apply the mask to the image.
+    result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
+    return result
+
 
 def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
     """Function computes the transformation matrix between real-world
@@ -142,10 +206,10 @@ def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
         (225.27, 94.68): (240, 103),
         (386.5, 91.55): (492, 98),
         (221.25, -110.62): (248, 419)}
-        
+
     Returns:
         np.ndarray: array that represents the transformation matrix.
-    """    
+    """
     A = np.zeros((2 * len(mm2pix_dict), 6), dtype=float)
     b = np.zeros((2 * len(mm2pix_dict), 1), dtype=float)
     index = 0
@@ -164,13 +228,14 @@ def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
         b[2 * index + 1, 0] = Y
         index += 1
     x, residuals, rank, singular_values = np.linalg.lstsq(A, b, rcond=None)
-    tf_mtx = np.zeros((3,3))
-    tf_mtx[0,:] = np.squeeze(x[:3])
-    tf_mtx[1,:] = np.squeeze(x[3:])
-    tf_mtx[-1,-1] = 1
+    tf_mtx = np.zeros((3, 3))
+    tf_mtx[0, :] = np.squeeze(x[:3])
+    tf_mtx[1, :] = np.squeeze(x[3:])
+    tf_mtx[-1, -1] = 1
     return tf_mtx
 
-def cam_calibration(chessboardSize: tuple = (9,7), frameSize: tuple = (1024, 768),
+
+def cam_calibration(chessboardSize: tuple = (9, 7), frameSize: tuple = (1024, 768),
                     squares_sz_mm: float = 20.5, raw_path: str = '../camera_data/raw/'
                     ):
     ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
@@ -178,11 +243,10 @@ def cam_calibration(chessboardSize: tuple = (9,7), frameSize: tuple = (1024, 768
 
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-
     # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
     objp = np.zeros((chessboardSize[0] * chessboardSize[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0:chessboardSize[0],
-                        0:chessboardSize[1]].T.reshape(-1, 2)
+                           0:chessboardSize[1]].T.reshape(-1, 2)
 
     objp = objp * squares_sz_mm
 

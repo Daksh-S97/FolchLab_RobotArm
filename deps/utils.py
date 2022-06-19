@@ -2,6 +2,7 @@ from deps.alarm_servo import alarm_servo_list
 from deps.alarm_controller import alarm_controller_list
 import json
 import numpy as np
+from pynput import keyboard
 
 modes_dict = {1: 'ROBOT_MODE_INIT',
 2:	'ROBOT_MODE_BRAKE_OPEN', 	
@@ -13,6 +14,30 @@ modes_dict = {1: 'ROBOT_MODE_INIT',
 9:	'ROBOT_MODE_ERROR',
 10: 'ROBOT_MODE_PAUSE',
 11: 'ROBOT_MODE_JOG'}
+
+class Keyboard():
+
+    def __init__(self, dash):
+        self.coords = []
+        self.dash = dash
+    
+    def on_press(self, key):
+        try:
+            if key.char == 's':
+                print('Position saved!')
+                self.coords.append(get_pose(self.dash, verbose = False))
+        except AttributeError:
+            print('Special key pressed: {0}'.format(key))
+
+    def on_release(self, key):
+        if key == keyboard.Key.esc:
+            return False
+
+    def execute(self):
+        with keyboard.Listener(
+                on_press=self.on_press,
+                on_release=self.on_release) as listener:
+            listener.join()
 
 def report_mode(dash) -> None:
     """Report the current Robot mode according to modes_dict.
@@ -52,7 +77,7 @@ def report_error(dash) -> None:
                 desc = dic['en']['description']
                 print(f'Possible reasons from ALARM CONTROLLER:\n{desc}.')
 
-def get_pose(dash) -> np.ndarray:
+def get_pose(dash, verbose = True) -> np.ndarray:
     """Get the current arm position in format X,Y,Z,r.
 
     Args:
@@ -65,7 +90,34 @@ def get_pose(dash) -> np.ndarray:
     resp = dash.GetPose()
     coords = resp.split('{')[1].split('}')[0].split(',')
     coords = [float(coord) for coord in coords[:4]]
-    print(f'X = {coords[0]}\nY = {coords[1]}\nZ = {coords[2]}\nr = {coords[3]}')
+    if verbose:
+        print(f'X = {coords[0]}\nY = {coords[1]}\nZ = {coords[2]}\nr = {coords[3]}')
     return np.array(coords)
 
 default_pos = lambda move: move.JointMovJ(0,0,0,0)
+
+def assign_corners(coords, reverse = False):
+    if reverse:
+        offset = 1
+    else:
+        offset = 0
+
+    maxx = sorted(coords, key=lambda x: x[0+offset])
+
+    left = maxx[:2]
+    right = maxx[-2:]
+
+    l_sorty = sorted(left, key=lambda x: x[1-offset])
+    r_sorty = sorted(right, key=lambda x: x[1-offset])
+
+    ul = l_sorty[0]
+    ll = l_sorty[1]
+
+    ur = r_sorty[0]
+    lr = r_sorty[1]
+
+    corners_dict = {'ul':ul,
+                    'ur':ur,
+                    'lr':lr,
+                    'll':ll}
+    return corners_dict
