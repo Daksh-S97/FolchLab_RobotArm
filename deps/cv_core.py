@@ -44,6 +44,11 @@ class Contours():
         kernel = np.ones((3,3),np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
+        # kernel = np.ones((3,3),np.uint8)
+        # erosion = cv2.erode(mask1,kernel,iterations = 1)
+        # kernel = np.ones((2,2),np.uint8)
+        # dilation = cv2.dilate(erosion,kernel,iterations = 4)
+
         contours, hierarchy = cv2.findContours(
                 mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
