@@ -65,15 +65,23 @@ class Contours():
         return centers
 
     def get_circles(self, frame: np.ndarray):
-        blurred = cv2.blur(frame, (7, 7))
+        blur = cv2.GaussianBlur(frame,(3,3),0)
+        ret, thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-        detected_circles = cv2.HoughCircles(image=blurred,
+        #ret,thresh = cv2.threshold(img,127,255,cv2.THRESH_BINARY)
+        kernel = np.ones((3,3),np.uint8)
+        #closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        #opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+        dilation = cv2.dilate(thresh,kernel,iterations = 3)
+
+        blur2 = cv2.blur(dilation, (7, 7))
+        detected_circles = cv2.HoughCircles(image=blur2,
                                             method=cv2.HOUGH_GRADIENT,
                                             dp=1.2,
-                                            minDist=10,
-                                            param1=50,
+                                            minDist=500,
+                                            param1=100,
                                             param2=50,
-                                            minRadius=0,
+                                            minRadius=50,
                                             maxRadius=300
                                             )
 
