@@ -201,7 +201,7 @@ def mask_frame(frame, pt):
     a, b, r = pt
     # Create mask to isolate the information in the petri dish.
     mask = np.zeros_like(frame)
-    mask = cv2.circle(mask, (a, b), r-15, (255, 255, 255), -1)
+    mask = cv2.circle(mask, (a, b), r-55, (255, 255, 255), -1)
     #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     # Apply the mask to the image.
     result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
