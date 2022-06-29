@@ -7,6 +7,7 @@ import glob
 class Contours():
     def __init__(self) -> None:
         self.best_circ = None
+        self.min_len = None
 
     def contour_centers(self, contours):
         centers = []
@@ -17,7 +18,7 @@ class Contours():
             centers.append((cX, cY))
         return centers
 
-    def filter_contours(self, contours: tuple, eps: int = 30) -> list:
+    def filter_contours(self, contours: tuple, lower: int = 30, upper: int = 400) -> list:
         """Function filteres the inputed contours to be bigger than size eps.
 
         Args:
@@ -30,7 +31,7 @@ class Contours():
         """    
         filtered_contours = []
         for contour in contours:
-            if cv2.contourArea(contour) > eps:
+            if cv2.contourArea(contour) > lower and cv2.contourArea(contour) < upper:
                 filtered_contours.append(contour)
         return filtered_contours
 
@@ -86,8 +87,8 @@ class Contours():
                                             minDist=500,
                                             param1=100,
                                             param2=50,
-                                            minRadius=50,
-                                            maxRadius=300
+                                            minRadius=300,
+                                            maxRadius=600
                                             )
 
         if detected_circles is not None:
@@ -104,7 +105,7 @@ class Contours():
             if np.sqrt(np.sum((best_center - curr_center)**2)) > 10:
                 self.best_circ = pt
 
-    def find_contours(self, frame: np.ndarray, eps: float = 20) -> tuple:
+    def find_contours(self, frame: np.ndarray, eps: float = 20, offset = 90) -> tuple:
         """General contour finding pipeline of objects inside a circular contour. In our case
         we are looking for objects in a Petri dish.
 
@@ -123,23 +124,32 @@ class Contours():
                              norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         # Apply a little gaussian blur:
         blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
-        # blurred2 = cv2.blur(gray, (7, 7))
+        blurred2 = cv2.blur(gray, (7, 7))
         # Apply binary thresholding:
-        (T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
+        #(T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
+        ret, thresh = cv2.threshold(blurred2,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
         self.get_circles(gray)
-        result = mask_frame(thresh, self.best_circ)
+        result = mask_frame(thresh, self.best_circ, offset)
 
         # Find all the contours in the resulting image.
         contours, hierarchy = cv2.findContours(
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # We want to apply a size threshold to the contours.
-        sorted_contours = []
-        for contour in contours:
-            if cv2.contourArea(contour) > eps:
-                sorted_contours.append(contour)
 
-        return (self.best_circ, sorted_contours)
+        # We want to apply a size threshold to the contours.
+        single = self.filter_contours(contours, eps, 150)
+        clusters = self.filter_contours(contours, 150, 1000)
+
+        # if self.min_len is None or len(single) < self.min_len:
+        #     self.min_len = len(single)
+        # single = single[:self.min_len]
+        #print(self.min_len)
+        # sorted_contours = []
+        # for contour in contours:
+        #     if cv2.contourArea(contour) > eps and cv2.contourArea(contour) < 1000:
+        #         sorted_contours.append(contour)
+
+        return (self.best_circ, single, clusters)
 
 
 def camera_res(camera_idx: int = 0) -> dict:
@@ -197,11 +207,11 @@ def set_res(cap: cv2.VideoCapture, res: tuple) -> cv2.VideoCapture:
     return cap
 
 
-def mask_frame(frame, pt):
+def mask_frame(frame, pt, offset):
     a, b, r = pt
     # Create mask to isolate the information in the petri dish.
     mask = np.zeros_like(frame)
-    mask = cv2.circle(mask, (a, b), r-55, (255, 255, 255), -1)
+    mask = cv2.circle(mask, (a, b), r-offset, (255, 255, 255), -1)
     #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     # Apply the mask to the image.
     result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
