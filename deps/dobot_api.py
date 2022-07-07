@@ -407,6 +407,15 @@ class DobotApiDashboard(DobotApi):
         self.send_data(string)
         return self.wait_reply()
 
+    def SetCollisionLevel(self, level):
+        """
+        Set the collision sensitivity.
+        1-5, 5 most sensitive.
+        """
+        string = f"SetCollisionLevel({level})"
+        self.send_data(string)
+        return self.wait_reply()
+
 
 class DobotApiMove(DobotApi):
     """

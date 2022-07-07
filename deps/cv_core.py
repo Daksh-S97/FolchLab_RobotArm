@@ -3,13 +3,33 @@ import numpy as np
 import pandas as pd
 import glob
 
+camera_res_dict = {
+            '240':(320,240),
+            '480':(640,480),
+            '600':(800,600),
+            '768':(1024, 768),
+            '960':(1280, 960),
+            '1200':(1600, 1200),
+            '1536':(2048, 1536),
+            '1944':(2592, 1944),
+            '2448':(3264, 2448)}
 
 class Contours():
     def __init__(self) -> None:
         self.best_circ = None
         self.min_len = None
+        self.locked = False
 
-    def contour_centers(self, contours):
+    def contour_centers(self, contours: tuple) -> list:
+        """Function calculates the centers of the inputed contours.
+
+        Args:
+            contours (tuple): A tuple of contours to be filtered, normally outputed 
+            by cv2.findContours() function.
+
+        Returns:
+            list: outputs list of coordinates of the contour centers.
+        """
         centers = []
         for contour in contours:
             M = cv2.moments(contour)
@@ -37,24 +57,18 @@ class Contours():
 
     def find_anchors(self, frame: np.ndarray):
 
-        img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        mask1 = cv2.inRange(img_hsv, (0,50,20), (5,255,255))
-        mask2 = cv2.inRange(img_hsv, (175,50,20), (180,255,255))
-        mask = cv2.bitwise_or(mask1, mask2)
-        kernel = np.ones((3,3),np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-        # kernel = np.ones((3,3),np.uint8)
-        # erosion = cv2.erode(mask1,kernel,iterations = 1)
-        # kernel = np.ones((2,2),np.uint8)
-        # dilation = cv2.dilate(erosion,kernel,iterations = 4)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        adjusted = cv2.convertScaleAbs(hsv, alpha=3)
+        mask = cv2.inRange(adjusted, (0,100,255), (35,255,255))
+        kernel = np.ones((5,5),np.uint8)
+        opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        dilation = cv2.dilate(opening, np.ones((3,3),np.uint8),iterations = 2)
 
         contours, hierarchy = cv2.findContours(
-                mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                dilation, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         filtered_contours = self.filter_contours(contours)
-        return filtered_contours
+        return contours
 
     def wait_for_anchors(self, cap: cv2.VideoCapture, num_anhors: int = 4, show: bool = False):
         while True:
@@ -96,6 +110,7 @@ class Contours():
             detected_circles = np.uint16(np.around(detected_circles))
             pt = detected_circles[0][0]
             a, b, r = pt
+            
             if self.best_circ is None or r < self.best_circ[2]:
                 self.best_circ = pt
 
@@ -118,20 +133,29 @@ class Contours():
         """
 
         # Convert image to grayscale:
+        # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # # Normalize the image:
+        # nimg = cv2.normalize(gray, None, alpha=0, beta=1,
+        #                      norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        # # Apply a little gaussian blur:
+        # blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
+        # blurred2 = cv2.blur(gray, (7, 7))
+        # # Apply binary thresholding:
+        # #(T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
+        # ret, thresh = cv2.threshold(blurred2,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # Normalize the image:
-        nimg = cv2.normalize(gray, None, alpha=0, beta=1,
-                             norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-        # Apply a little gaussian blur:
-        blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
-        blurred2 = cv2.blur(gray, (7, 7))
-        # Apply binary thresholding:
-        #(T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
-        ret, thresh = cv2.threshold(blurred2,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        ret, thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        #ret,thresh = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
+        kernel = np.ones((3,3),np.uint8)
+        #closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
-        self.get_circles(gray)
-        result = mask_frame(thresh, self.best_circ, offset)
-
+        if not self.locked:
+            self.get_circles(gray)
+        #result = mask_frame(thresh, self.best_circ, offset)
+        result = mask_frame(opening, self.best_circ, offset)
         # Find all the contours in the resulting image.
         contours, hierarchy = cv2.findContours(
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -139,15 +163,6 @@ class Contours():
         # We want to apply a size threshold to the contours.
         single = self.filter_contours(contours, eps, 150)
         clusters = self.filter_contours(contours, 150, 1000)
-
-        # if self.min_len is None or len(single) < self.min_len:
-        #     self.min_len = len(single)
-        # single = single[:self.min_len]
-        #print(self.min_len)
-        # sorted_contours = []
-        # for contour in contours:
-        #     if cv2.contourArea(contour) > eps and cv2.contourArea(contour) < 1000:
-        #         sorted_contours.append(contour)
 
         return (self.best_circ, single, clusters)
 
