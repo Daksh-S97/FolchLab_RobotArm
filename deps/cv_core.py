@@ -19,6 +19,16 @@ class Contours():
         self.best_circ = None
         self.min_len = None
         self.locked = False
+        self.selected = []
+        self.singular = None
+        self.clusters = None
+
+    def mousecallback(self,event,x,y,flags,param):
+        if event == cv2.EVENT_LBUTTONDBLCLK:
+            for contour in self.singular:
+                r=cv2.pointPolygonTest(contour, (x,y), False)
+                if r>0:
+                    self.selected.append(contour)
 
     def contour_centers(self, contours: tuple) -> list:
         """Function calculates the centers of the inputed contours.
@@ -161,10 +171,10 @@ class Contours():
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # We want to apply a size threshold to the contours.
-        single = self.filter_contours(contours, eps, 150)
-        clusters = self.filter_contours(contours, 150, 1000)
+        self.singular = self.filter_contours(contours, eps, 150)
+        self.clusters = self.filter_contours(contours, 150, 1000)
 
-        return (self.best_circ, single, clusters)
+        return self.best_circ
 
 
 def camera_res(camera_idx: int = 0) -> dict:
