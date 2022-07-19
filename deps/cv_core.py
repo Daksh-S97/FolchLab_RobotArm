@@ -1,4 +1,5 @@
 import cv2
+from matplotlib.pyplot import plot
 import numpy as np
 import pandas as pd
 import glob
@@ -17,14 +18,33 @@ camera_res_dict = {
 class Contours():
     def __init__(self) -> None:
         self.best_circ = None
-        self.min_len = None
+        self.big_circ = None
         self.locked = False
         self.selected = []
         self.singular = None
         self.clusters = None
 
     def mousecallback(self,event,x,y,flags,param):
+        """OpenCV mouse callback function for registering double clicks.
+        In our case used to select individual cuboids and pick them insted of
+        picking everything automatically. If there is another double click then
+        deselect the cuboid.
+
+        Args:
+            event (int?): OpenCV event code. Usually an int?
+            x (int?): x position of the click in the image.
+            y (int?): y position of the click in the image.
+            flags (_type_): No idea.
+            param (_type_): Optional parameter the can be returned?
+        """        
         if event == cv2.EVENT_LBUTTONDBLCLK:
+            if self.selected:
+                for contour in self.selected:
+                    r=cv2.pointPolygonTest(contour, (x,y), False)
+                    if r > 0:
+                        self.selected.remove(contour)
+                        return
+
             for contour in self.singular:
                 r=cv2.pointPolygonTest(contour, (x,y), False)
                 if r>0:
@@ -65,8 +85,17 @@ class Contours():
                 filtered_contours.append(contour)
         return filtered_contours
 
-    def find_anchors(self, frame: np.ndarray):
+    def find_red_anchors(self, frame: np.ndarray) -> list:
+        """Function finds red spots in a frame, gets and returns their contours. This is
+        useful if you want to roughly calibrate your robot arm. Tuned to recognize red
+        sharpie on transparent plastic.
 
+        Args:
+            frame (np.ndarray): frame in which to find the anchors.
+
+        Returns:
+            list: Outputs list of contours with size greater than eps.
+        """        
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         adjusted = cv2.convertScaleAbs(hsv, alpha=3)
         mask = cv2.inRange(adjusted, (0,100,255), (35,255,255))
@@ -80,7 +109,17 @@ class Contours():
         filtered_contours = self.filter_contours(contours)
         return contours
 
-    def wait_for_anchors(self, cap: cv2.VideoCapture, num_anhors: int = 4, show: bool = False):
+    def wait_for_anchors(self, cap: cv2.VideoCapture, num_anhors: int = 4, show: bool = False) -> list:
+        """DEPRECATE or MODIFY later. Interface function for anchor recognition.
+
+        Args:
+            cap (cv2.VideoCapture): _description_
+            num_anhors (int, optional): _description_. Defaults to 4.
+            show (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            list: _description_
+        """        
         while True:
             ret, frame = cap.read()
             anchors = self.find_anchors(frame)
@@ -94,14 +133,17 @@ class Contours():
         centers = self.contour_centers(anchors)
         return centers
 
-    def get_circles(self, frame: np.ndarray):
+    def get_circles(self, frame: np.ndarray) -> None:
+        """Function looks for a petri dish in the frame, and assigns the smallest one
+        to a class variable for storage. 
+
+        Args:
+            frame (np.ndarray): frame in which to detect the petri dish.
+        """        
         blur = cv2.GaussianBlur(frame,(3,3),0)
         ret, thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-        #ret,thresh = cv2.threshold(img,127,255,cv2.THRESH_BINARY)
         kernel = np.ones((3,3),np.uint8)
-        #closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        #opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
         dilation = cv2.dilate(thresh,kernel,iterations = 3)
 
         blur2 = cv2.blur(dilation, (7, 7))
@@ -116,7 +158,6 @@ class Contours():
                                             )
 
         if detected_circles is not None:
-            # Convert the circle parameters a, b and r to integers.
             detected_circles = np.uint16(np.around(detected_circles))
             pt = detected_circles[0][0]
             a, b, r = pt
@@ -126,9 +167,13 @@ class Contours():
 
             best_center = np.array(self.best_circ[:2])
             curr_center = np.array([a, b])
-            #print(best_center, curr_center, np.sqrt(np.sum((best_center - curr_center)**2)))
-            if np.sqrt(np.sum((best_center - curr_center)**2)) > 10:
+            if np.sqrt(np.sum((best_center - curr_center)**2)) > 15:
                 self.best_circ = pt
+
+            self.big_circ = self.best_circ.copy()
+            self.big_circ[2] *= 1.2
+            self.biggest_sz = np.pi*self.big_circ[2]**2 * 0.25 / (np.pi*30**2) #size related
+            self.smallest_sz = np.pi*self.big_circ[2]**2 * 0.04 / (np.pi*30**2) #size related
 
     def find_contours(self, frame: np.ndarray, eps: float = 20, offset = 90) -> tuple:
         """General contour finding pipeline of objects inside a circular contour. In our case
@@ -141,20 +186,6 @@ class Contours():
         Returns:
             tuple: tuple of circle parameters and contours found in the Petri dish.
         """
-
-        # Convert image to grayscale:
-        # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        # # Normalize the image:
-        # nimg = cv2.normalize(gray, None, alpha=0, beta=1,
-        #                      norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-        # # Apply a little gaussian blur:
-        # blurred = cv2.GaussianBlur(nimg, (5, 5), 0)
-        # blurred2 = cv2.blur(gray, (7, 7))
-        # # Apply binary thresholding:
-        # #(T, thresh) = cv2.threshold(blurred, 0.5, 1, cv2.THRESH_BINARY)
-        # ret, thresh = cv2.threshold(blurred2,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         ret, thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         #ret,thresh = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
@@ -164,15 +195,14 @@ class Contours():
 
         if not self.locked:
             self.get_circles(gray)
-        #result = mask_frame(thresh, self.best_circ, offset)
         result = mask_frame(opening, self.best_circ, offset)
         # Find all the contours in the resulting image.
         contours, hierarchy = cv2.findContours(
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # We want to apply a size threshold to the contours.
-        self.singular = self.filter_contours(contours, eps, 150)
-        self.clusters = self.filter_contours(contours, 150, 1000)
+        self.singular = self.filter_contours(contours, self.smallest_sz, self.biggest_sz)
+        self.clusters = self.filter_contours(contours, self.biggest_sz, 1000)
 
         return self.best_circ
 
@@ -232,12 +262,22 @@ def set_res(cap: cv2.VideoCapture, res: tuple) -> cv2.VideoCapture:
     return cap
 
 
-def mask_frame(frame, pt, offset):
+def mask_frame(frame: np.ndarray, pt: tuple, offset: int) -> np.ndarray:
+    """Function creates a circular mask and applies it to an image. In our case this is
+    used to select the area in the petri dish only and find contours there.
+
+    Args:
+        frame (np.ndarray): frame that needs to be masked.
+        pt (tuple): circle parameters, center coordinates a,b and radius r.
+        offset (int): an offset for mask application. Useful if circle is too large.
+
+    Returns:
+        np.ndarray: returns a masked image.
+    """    
     a, b, r = pt
     # Create mask to isolate the information in the petri dish.
     mask = np.zeros_like(frame)
     mask = cv2.circle(mask, (a, b), r-offset, (255, 255, 255), -1)
-    #mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     # Apply the mask to the image.
     result = cv2.bitwise_and(frame.astype('uint8'), mask.astype('uint8'))
     return result
@@ -281,6 +321,64 @@ def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
     tf_mtx[1, :] = np.squeeze(x[3:])
     tf_mtx[-1, -1] = 1
     return tf_mtx
+
+def main_pipe(frame, cont):
+    prev_point = (0,0,0)
+    val = 0
+    offset = 40
+    if val == 1:
+        cont.locked = True
+    else:
+        cont.locked = False
+
+    pt = cont.find_contours(frame, 10, offset)
+    a,b,r = pt
+    plot_img = frame.copy()
+    cv2.circle(plot_img, (a, b), r, (3, 162, 255), 2)
+    cv2.circle(plot_img, (a, b), 1, (0, 0, 255), 3)
+    cv2.circle(plot_img, (a, b), r - offset, (0, 255, 0), 2)
+    cv2.circle(plot_img, cont.big_circ[:2], cont.big_circ[2], (0, 0, 255), 2)
+    cv2.putText(plot_img, f"{cont.big_circ[2]*2}px = 60mm", (cont.big_circ[0]-25, cont.big_circ[1] - cont.big_circ[2] - 10),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
+    
+    cv2.drawContours(plot_img, cont.singular, -1,(0,255, 0),2)
+    cv2.drawContours(plot_img, cont.clusters, -1,(0,0,255),2)
+
+    if cont.selected:
+        cv2.drawContours(plot_img, cont.selected, -1,(255,0,0),2)
+
+    for c in cont.singular:
+        M = cv2.moments(c)
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        cv2.circle(plot_img, (cX, cY), 2, (0, 0, 255), -1)
+        cv2.putText(plot_img, f"{cv2.contourArea(c)}", (cX - 20, cY - 20),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
+
+    for c in cont.clusters:
+        M = cv2.moments(c)
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        cv2.circle(plot_img, (cX, cY), 2, (0, 0, 255), -1)
+
+    if prev_point is pt:
+        idx += 1
+    else:
+        idx = 0
+    prev_point = pt
+
+    if idx >= 30:
+        message = 'LOCKED'
+        color = (0,255,0)
+    else:
+        message = 'SEARCHING'
+        color = (0,0,255)
+
+    cv2.putText(plot_img, "TARGET:", (25,25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0,255,0), 2)
+    cv2.putText(plot_img, f"{message}", (125,25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, color, 2)
+    cv2.putText(plot_img, f"Found: {len(cont.singular)}", (25,50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0,255,0), 2)
+
+    return plot_img
 
 
 def cam_calibration(chessboardSize: tuple = (9, 7), frameSize: tuple = (1024, 768),
