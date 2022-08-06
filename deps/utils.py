@@ -39,6 +39,75 @@ class Keyboard():
                 on_release=self.on_release) as listener:
             listener.join()
 
+class ManualMove():
+
+    def __init__(self, move, dash):
+        self.move = move
+        self.dash = dash
+        self.status = False
+        self.coords = []
+
+    def get_pose(self, dash, verbose = True) -> np.ndarray:
+        """Get the current arm position in format X,Y,Z,r.
+
+        Args:
+            dash (DobotApiDashboard): Dashboard class object currently 
+            connected to the robot.
+
+        Returns:
+            np.ndarray: Numpy array with 4 etries: X,Y,Z,r.
+        """    
+        resp = dash.GetPose()
+        coords = resp.split('{')[1].split('}')[0].split(',')
+        coords = [float(coord) for coord in coords[:4]]
+        if verbose:
+            print(f'X = {coords[0]}\nY = {coords[1]}\nZ = {coords[2]}\nr = {coords[3]}')
+        return np.array(coords)
+    
+    def on_press(self, key):
+        try:
+            if key == keyboard.Key.up and not self.status:
+                
+                self.move.MoveJog('X-')
+                self.status = True
+            if key == keyboard.Key.down and not self.status:
+                
+                self.move.MoveJog('X+')
+                self.status = True
+            if key == keyboard.Key.left and not self.status:
+                
+                self.move.MoveJog('Y-')
+                self.status = True
+            if key == keyboard.Key.right and not self.status:
+                
+                self.move.MoveJog('Y+')
+                self.status = True
+            if key == keyboard.Key.page_up and not self.status:
+                
+                self.move.MoveJog('Z+')
+                self.status = True
+            if key == keyboard.Key.page_down and not self.status:
+
+                self.move.MoveJog('Z-')
+                self.status = True
+            if key.char == 's':
+                print('Position saved!')
+                self.coords.append(self.get_pose(self.dash, False))
+        except Exception as e:
+            pass
+
+    def on_release(self, key):
+        self.dash.ResetRobot()
+        self.status = False
+        if key == keyboard.Key.esc:
+            return False
+
+    def execute(self):
+        with keyboard.Listener(
+                on_press=self.on_press,
+                on_release=self.on_release) as listener:
+            listener.join()
+
 def report_mode(dash) -> None:
     """Report the current Robot mode according to modes_dict.
 
@@ -95,6 +164,7 @@ def get_pose(dash, verbose = True) -> np.ndarray:
     return np.array(coords)
 
 default_pos = lambda move: move.JointMovJ(0,0,0,0)
+calib_pos = lambda move: move.MovL(250,0,-90,0)
 
 def assign_corners(coords, reverse = False):
     if reverse:

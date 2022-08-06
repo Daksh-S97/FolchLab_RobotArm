@@ -1,7 +1,7 @@
 import cv2
 from matplotlib.pyplot import plot
 import numpy as np
-import pandas as pd
+#import pandas as pd
 import glob
 
 camera_res_dict = {
@@ -18,11 +18,12 @@ camera_res_dict = {
 class Contours():
     def __init__(self) -> None:
         self.best_circ = None
-        self.big_circ = None
+        self.big_circ = [800, 600, 300] 
         self.locked = False
         self.selected = []
         self.singular = None
         self.clusters = None
+        self.inv = True
 
     def mousecallback(self,event,x,y,flags,param):
         """OpenCV mouse callback function for registering double clicks.
@@ -141,7 +142,10 @@ class Contours():
             frame (np.ndarray): frame in which to detect the petri dish.
         """        
         blur = cv2.GaussianBlur(frame,(3,3),0)
-        ret, thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        if not self.inv:
+            ret, thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        else:
+            ret, thresh = cv2.threshold(blur,125,255,cv2.THRESH_BINARY_INV)
 
         kernel = np.ones((3,3),np.uint8)
         dilation = cv2.dilate(thresh,kernel,iterations = 3)
@@ -154,7 +158,7 @@ class Contours():
                                             param1=100,
                                             param2=50,
                                             minRadius=300,
-                                            maxRadius=600
+                                            maxRadius=900
                                             )
 
         if detected_circles is not None:
@@ -187,15 +191,16 @@ class Contours():
             tuple: tuple of circle parameters and contours found in the Petri dish.
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        ret, thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-        #ret,thresh = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
-        kernel = np.ones((3,3),np.uint8)
-        #closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+        if not self.inv:
+            ret, thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+            kernel = np.ones((3,3),np.uint8)
+            res = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+        else:
+            ret,res = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
 
         if not self.locked:
             self.get_circles(gray)
-        result = mask_frame(opening, self.best_circ, offset)
+        result = mask_frame(res, self.best_circ, offset)
         # Find all the contours in the resulting image.
         contours, hierarchy = cv2.findContours(
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -207,27 +212,27 @@ class Contours():
         return self.best_circ
 
 
-def camera_res(camera_idx: int = 0) -> dict:
-    """Function checks which resolutions work with the current camera.
+# def camera_res(camera_idx: int = 0) -> dict:
+#     """Function checks which resolutions work with the current camera.
 
-    Args:
-        camera_idx (int, optional): Index of the camera. Defaults to 0.
+#     Args:
+#         camera_idx (int, optional): Index of the camera. Defaults to 0.
 
-    Returns:
-        dict: Dictionary with resolutions as keys, and bool status as values.
-    """
-    url = "https://en.wikipedia.org/wiki/List_of_common_resolutions"
-    table = pd.read_html(url)[0]
-    table.columns = table.columns.droplevel()
-    cap = cv2.VideoCapture(camera_idx)
-    resolutions = {}
-    for index, row in table[["W", "H"]].iterrows():
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, row["W"])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, row["H"])
-        width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        resolutions[str(width)+"x"+str(height)] = "OK"
-    return resolutions
+#     Returns:
+#         dict: Dictionary with resolutions as keys, and bool status as values.
+#     """
+#     url = "https://en.wikipedia.org/wiki/List_of_common_resolutions"
+#     table = pd.read_html(url)[0]
+#     table.columns = table.columns.droplevel()
+#     cap = cv2.VideoCapture(camera_idx)
+#     resolutions = {}
+#     for index, row in table[["W", "H"]].iterrows():
+#         cap.set(cv2.CAP_PROP_FRAME_WIDTH, row["W"])
+#         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, row["H"])
+#         width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+#         height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+#         resolutions[str(width)+"x"+str(height)] = "OK"
+#     return resolutions
 
 
 def video_test(cap: cv2.VideoCapture) -> None:
@@ -273,7 +278,7 @@ def mask_frame(frame: np.ndarray, pt: tuple, offset: int) -> np.ndarray:
 
     Returns:
         np.ndarray: returns a masked image.
-    """    
+    """
     a, b, r = pt
     # Create mask to isolate the information in the petri dish.
     mask = np.zeros_like(frame)
@@ -322,10 +327,10 @@ def compute_tf_mtx(mm2pix_dict: dict) -> np.ndarray:
     tf_mtx[-1, -1] = 1
     return tf_mtx
 
-def main_pipe(frame, cont):
+def main_pipe(frame, cont, offset):
     prev_point = (0,0,0)
     val = 0
-    offset = 40
+    #offset = 40
     if val == 1:
         cont.locked = True
     else:
