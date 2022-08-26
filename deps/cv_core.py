@@ -17,8 +17,10 @@ camera_res_dict = {
 
 class Contours():
     def __init__(self) -> None:
-        self.best_circ = None
-        self.big_circ = [800, 600, 300] 
+        self.best_circ = [800, 600, 300] 
+        self.big_circ = [800, 600, 300]
+        self.biggest_sz = np.pi*self.big_circ[2]**2 * 0.25 / (np.pi*30**2)
+        self.smallest_sz = np.pi*self.big_circ[2]**2 * 0.04 / (np.pi*30**2) 
         self.locked = False
         self.selected = []
         self.singular = None

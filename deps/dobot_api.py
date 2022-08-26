@@ -193,6 +193,14 @@ class DobotApiDashboard(DobotApi):
         string = "GetPose()"
         self.send_data(string)
         return self.wait_reply()
+
+    def GetAngle(self):
+        """
+        Get robot position in terms of joint angles.
+        """
+        string = "GetAngle()"
+        self.send_data(string)
+        return self.wait_reply()
     
     def ClearError(self):
         """
@@ -465,13 +473,13 @@ class DobotApiMove(DobotApi):
     def Jump(self):
         print("待定")
 
-    def RelMovJ(self, offset1, offset2, offset3, offset4, offset5, offset6):
+    def RelMovJ(self, offset1, offset2, offset3, offset4):
         """
         Offset motion interface (point-to-point motion mode)
         j1~j6:Point position values on each joint
         """
-        string = "RelMovJ({:f},{:f},{:f},{:f},{:f},{:f})".format(
-            offset1, offset2, offset3, offset4, offset5, offset6)
+        string = "RelMovJ({:f},{:f},{:f},{:f})".format(
+            offset1, offset2, offset3, offset4)
         self.send_data(string)
         return self.wait_reply()
 

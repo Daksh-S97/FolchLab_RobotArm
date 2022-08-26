@@ -56,8 +56,8 @@ class ManualMove():
 
         Returns:
             np.ndarray: Numpy array with 4 etries: X,Y,Z,r.
-        """    
-        resp = dash.GetPose()
+        """
+        resp = dash.GetPose()    
         coords = resp.split('{')[1].split('}')[0].split(',')
         coords = [float(coord) for coord in coords[:4]]
         if verbose:
@@ -108,6 +108,11 @@ class ManualMove():
                 on_release=self.on_release) as listener:
             listener.join()
 
+def correct_J4_angle(prev_angle, dash, move):
+    joint_angles = get_pose(dash, verbose=False, angle = True)
+    r1, r2, r3, r4 = joint_angles
+    move.JointMovJ(r1,r2,r3,prev_angle)
+
 def report_mode(dash) -> None:
     """Report the current Robot mode according to modes_dict.
 
@@ -146,7 +151,7 @@ def report_error(dash) -> None:
                 desc = dic['en']['description']
                 print(f'Possible reasons from ALARM CONTROLLER:\n{desc}.')
 
-def get_pose(dash, verbose = True) -> np.ndarray:
+def get_pose(dash, verbose = True, angle = False) -> np.ndarray:
     """Get the current arm position in format X,Y,Z,r.
 
     Args:
@@ -155,8 +160,11 @@ def get_pose(dash, verbose = True) -> np.ndarray:
 
     Returns:
         np.ndarray: Numpy array with 4 etries: X,Y,Z,r.
-    """    
-    resp = dash.GetPose()
+    """
+    if angle:
+        resp = dash.GetAngle()
+    else:
+        resp = dash.GetPose()    
     coords = resp.split('{')[1].split('}')[0].split(',')
     coords = [float(coord) for coord in coords[:4]]
     if verbose:
