@@ -112,6 +112,7 @@ def correct_J4_angle(prev_angle, dash, move):
     joint_angles = get_pose(dash, verbose=False, angle = True)
     r1, r2, r3, r4 = joint_angles
     move.JointMovJ(r1,r2,r3,prev_angle)
+    move.Sync()
 
 def report_mode(dash) -> None:
     """Report the current Robot mode according to modes_dict.

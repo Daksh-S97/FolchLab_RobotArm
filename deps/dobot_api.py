@@ -1,11 +1,11 @@
-import socket
-from threading import Timer
-from tkinter import Text, END
-import datetime
-import numpy as np
+import socket # socket is a module that allows interaction with things using internet connectivity
+from threading import Timer # threading is a module and we only want to import the class Timer which is from threading
+from tkinter import Text, END # tkinter is a module and w only want to import the class Text which is from tkinter, END is a String variable (importing Text and END) 
+import datetime # datetime is a module that allows you to operate timings and time etc.
+import numpy as np # numpy is a module (package, library synonymous) and call it np cause we are lazy, numpy allows numbers an linear algebra operations etc.
 
 # Port Feedback
-MyType = np.dtype([(
+MyType = np.dtype([( # We do not know what this is
     'len',
     np.int64,
 ), (
@@ -50,7 +50,7 @@ MyType = np.dtype([(
 ), (
     'i_robot_keep_bit2',
     np.float64,
-), ('tool_accelerometer_values', np.float64, (3, )),
+), ('tool_accelerometer_values', np.float64, (3, )), # seems like a dictionary of tyesof variables 
     ('elbow_position', np.float64, (3, )),
     ('elbow_velocity', np.float64, (3, )),
     ('q_target', np.float64, (6, )),
@@ -71,7 +71,7 @@ MyType = np.dtype([(
     ('joint_modes', np.float64, (6, )),
     ('v_actual', np.float64, (6, )),
     ('dummy', np.float64, (9, 6))])
-# ('hand_type', np.char, (4, )),
+# ('hand_type', np.char, (4, )),    # more dictionary, list of types for different kinds of variables
 # ('user', np.char,),
 # ('tool', np.char,),
 # ('run_queued_cmd', np.char,),
@@ -112,9 +112,16 @@ MyType = np.dtype([(
 # ('actual_quaternion', np.float64, (4, )),
 # ('reserve3', np.char, (24, ))])
 
-
 class DobotApi:
-    def __init__(self, ip, port, *args):
+    """_summary_
+    This class and its methods allow you to connect to the Dobot via the ethernet cable
+    """    
+    def __init__(self, ip, port, *args):       
+        """
+        These are attributes of the class, when class is initiated 
+        self is a special kind of variable or argument that is a self reference to the object of the class 
+        an object is an instance of a class
+        """
         self.ip = ip
         self.port = port
         self.socket_dobot = 0
@@ -766,7 +773,7 @@ class DobotApiMove(DobotApi):
         self.send_data(string)
         return self.wait_reply()
 
-    def RelJointMovJ(self, offset1, offset2, offset3, offset4, offset5, offset6, *dynParams):
+    def RelJointMovJ(self, offset1, offset2, offset3, offset4, *dynParams):
         """
         The relative motion command is carried out along the joint coordinate system of each axis, and the end motion mode is joint motion
         Offset motion interface (point-to-point motion mode)
@@ -775,8 +782,8 @@ class DobotApiMove(DobotApi):
                     speed_j: Set Cartesian speed scale, value range: 1 ~ 100
                     acc_j: Set acceleration scale value, value range: 1 ~ 100
         """
-        string = "RelJointMovJ({:f},{:f},{:f},{:f},{:f},{:f}".format(
-            offset1, offset2, offset3, offset4, offset5, offset6)
+        string = "RelJointMovJ({:f},{:f},{:f},{:f}".format(
+            offset1, offset2, offset3, offset4)
         for params in dynParams:
             print(type(params), params)
             string = string + ", SpeedJ={:d}, AccJ={:d}".format(
