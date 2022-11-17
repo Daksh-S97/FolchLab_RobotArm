@@ -244,6 +244,9 @@ def video_test(cap: cv2.VideoCapture) -> None:
     Args:
         cap (cv2.VideoCapture): video capture object.
     """
+
+    cv2.namedWindow('frame',  cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('frame', 1348, 1011)
     while(True):
         ret, frame = cap.read()
         cv2.imshow('frame', frame)
