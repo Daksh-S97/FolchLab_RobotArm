@@ -24,6 +24,9 @@ class RobotApp:
         self.cap_on = False
         self.cap = None
 
+        self.recorded = []
+        self.anchorflag = 0
+
         #self.root.geometry("1920x1080")
 
 
@@ -133,32 +136,95 @@ class RobotApp:
         mananchor_button = Button(self.frame, text="Get petri dish anchors", command=self.get_anchors)
         mananchor_button.place(x=15,y=15)
 
-        caldish_button = Button(self.frame, text="calibrate petri dish", command=self.initialise_calibrate_dish)
+        caldish_button = Button(self.frame, text="Calibrate petri dish", command=self.initialise_calibrate_dish)
         caldish_button.place(x=15,y=45)
 
+        calplate_button = Button(self.frame, text="Get well plate corners", command=self.get_well_plate_anchors)
+        calplate_button.place(x=15,y=75)
+        
+        testplate_button = Button(self.frame, text="Test well plate", command=self.test_96_wellplate)
+        testplate_button.place(x=15,y=105)
 
-    def create_finish_calibration_buttons(self):
+
+
+    def create_finish_calibration_buttons(self):  # this is for petri dish anchors only
         for widget in self.frame.winfo_children():
             widget.destroy()
 
-        Next_button = Button(self.frame, text="Finish",height=1,width=10, command=self.finalise_calibration)
-        Next_button.place(x = 10, y = 15)
+        Finish_button = Button(self.frame, text="Finish",height=1,width=10, command=self.finalise_calibration)
+        Finish_button.place(x = 10, y = 15)
 
-        Abort_button = Button(self.frame, text="Abort",height=1,width=10, command=self.create_calib_buttons)
+        Abort_button = Button(self.frame, text="Abort",height=1,width=10, command=self.abort)
         Abort_button.place(x = 130, y = 15)
 
     ############################################# Functions that actually do the work
 
+    def test_96_wellplate(self):
+        grid = np.load('well_plate_96_tk.npy')
+        Bot.enable()
+        iter = 16
+        for coord in grid:
+            if iter < 1:
+                break
+            iter = iter-1
+            x,y = coord
+            Bot.move.MovL(x,y,-40,0)
+            Bot.move.Sync()
+            Bot.move.MovL(x,y,-60,0)
+            Bot.move.Sync()
+            Bot.move.MovL(x,y,-40,0)
+            Bot.move.Sync()
+        Bot.disable()
+
+
+    def get_well_plate_anchors(self):
+
+        self.ins_message('Manually position the robot\n above the four corner cells\nin the well plate\n press s to record\n when done, press esc')
+        self.root.update()
+
+        keys = utils.Keyboard(Bot.dash) # initializing the class Keyboard from the module (file that houses functions (methods) and classes utils and we are passing the parameter dash
+        # we are giving the class Keyboard a connection to the robot which is called dash, dash is an object of the class dashboard
+        keys.execute() # Keyboard has a method called execute, use this to record the position of the robot by pressing s. if finished press esc
+        # we want to find corners of well plate so we record the position of the 4 corners and use this information later, just one use of execute of class keyboard
+        # this cell calculates the grid for the 96 well plate
+        print ('length is', len(keys.coords))
+        if len(keys.coords) == 4:
+            well_plate = utils.assign_corners(keys.coords, reverse=True) # assign_corners is a method in the module utils 
+            left_side_points = np.linspace(well_plate['ul'], well_plate['ll'], 12)[:,:2]
+            right_side_points = np.linspace(well_plate['ur'], well_plate['lr'], 12)[:,:2]
+            grid = []
+            for i in range(len(left_side_points)):
+                x1, y1 = left_side_points[i]
+                x2, y2 = right_side_points[i]
+                a = (x2-x1)/(y2-y1)
+                b = x1 - a*y1
+                ys = np.linspace(y1,y2,8) 
+                xs = a*ys + b
+                grid += (list(zip(xs,ys)))
+
+            np.save('well_plate_96_tk.npy',np.array(grid)) # saves well plate grid into a file named 'well_plate_96_tk.npy', we want to save this so we can use later and not repeat process
+            #np.load('well_plate_96_tk.npy')
+            self.ins_message('Well plate saved!')
+        else:
+            self.ins_message('Ensure you have four coordinates!')
+
+
 
     def get_anchors(self):
+
+        self.ins_message('Arrow keys: move, s key: save position\n when done, press esc')
+        self.root.update()
         
         Bot.enable()
         # use this to find points (fix z at -38)
         Bot.move.MovJ(250, -20, -38, 0)
+        Bot.move.Sync()
         manmove = utils.ManualMove(Bot.move, Bot.dash) # used to control robot with keyboard, uses key presses to control robot 
         manmove.execute()
         # after above step, display this
         manmove.coords
+
+        self.ins_message('saved ' + str(len(manmove.coords)) + ' coordinates')
         #save it   
         np.save('anchors_tk.npy', manmove.coords)
 
@@ -173,7 +239,7 @@ class RobotApp:
         for widget in self.frame.winfo_children():
             widget.destroy()
 
-        Next_button = Button(self.frame, text="Next",height=1,width=10, command=self.calibrate_dish)
+        Next_button = Button(self.frame, text="Execute",height=1,width=10, command=self.calibrate_dish)
         Next_button.place(x = 10, y = 15)
 
         Abort_button = Button(self.frame, text="Abort",height=1,width=10, command=self.abort)
@@ -181,7 +247,9 @@ class RobotApp:
 
     def abort(self):
         Bot.disable()
+        self.can.delete('all')
         self.create_calib_buttons()
+        self.ins_message('Petri Dish Calibration Aborted')
 
     def calibrate_dish(self):
         
@@ -256,6 +324,7 @@ class RobotApp:
             self.recorded.append((cX, cY)) # we record the x and y pixel values of the center of the blob so we can map the location onto the robots coordinates, at that point
         else:
             self.anchorflag = self.anchorflag - 1
+            self.ins_message('Too dark!')
 
         #time.sleep(1)
         #cv2.imwrite('temp.ppm', plot_img)
@@ -296,8 +365,15 @@ class RobotApp:
         self.tf_mtx = cv_core.compute_tf_mtx(features_mm_to_pixels_dict) # method of cv_core module that calculates transformation matrix
         # takes the dictionary and solves the system of linear equations that gives the transformation matrix and gives the actual relation between the pixels and millimeters 
         self.create_calib_buttons()
+        self.ins_message('Petri Dish Calibrated')
         self.can.delete('all')
         Bot.disable()
+
+    def ins_message(self,text:str): # TEXT MUST BE STR
+        self.text['state'] = 'normal'
+        self.text.insert(END, '\n\n'+text)
+        self.text['state'] = 'disabled'
+        self.text.see('end')
 
 
 
@@ -326,14 +402,17 @@ class RobotApp:
             self.stop_vid()
             self.execute_button.config(text='Execute')'''
 
-    def movetest(self):
-        p = utils.get_pose(Bot.dash, verbose=False)
+    # def movetest(self):
+    #     p = utils.get_pose(Bot.dash, verbose=False)
 
-        Bot.move.MovL(p[0], p[1], (p[2]+20),  p[3])
-        Bot.move.MovL(p[0], p[1], (p[2]-20),  p[3])
-        Bot.move.MovL(p[0], p[1], p[2],  p[3])
+    #     Bot.move.MovL(p[0], p[1], (p[2]+20),  p[3])
+    #     Bot.move.Sync()
+    #     Bot.move.MovL(p[0], p[1], (p[2]-20),  p[3])
+    #     Bot.move.Sync()
+    #     Bot.move.MovL(p[0], p[1], p[2],  p[3])
+    #     Bot.move.Sync()
 
-        self.execute_button.config(text='Execute')
+    #     self.execute_button.config(text='Execute')
 
 
     '''def start_vid(self, func):
