@@ -62,7 +62,7 @@ class RobotApp:
         self.combobox.grid(row=1,column=2,pady = 10)#pack(side='top', pady = 10)
         self.combobox.bind("<<ComboboxSelected>>",lambda e: frame2.focus())'''
 
-        self.text = Text(frame2, height=15, width=30, bg = 'black', fg = 'green2', padx=5, pady=5, yscrollcommand=True)
+        self.text = Text(frame2, height=15, width=30, bg = 'black', fg = 'green2', padx=5, pady=5, yscrollcommand=True,wrap='word')
         self.text.place(x= 5, y = 200)#pack(side = 'bottom')
         self.text.insert('1.0', 'Welcome!')
         self.text['state'] = 'disabled'
@@ -125,7 +125,6 @@ class RobotApp:
         zuarrow = Button(frame3, text = '', width=45, height=45,image = z_up_arrow).pack(side = 'top',  padx = 3, pady = 3)
         '''
         #self.root.mainloop()
-
     ########################################## class functions for switching between calibrate and run etc
 
     def create_calib_buttons(self):
@@ -179,7 +178,7 @@ class RobotApp:
 
     def get_well_plate_anchors(self):
 
-        self.ins_message('Manually position the robot\n above the four corner cells\nin the well plate\n press s to record\n when done, press esc')
+        self.ins_message('Manually position the robot above the four corner cells in the well plate, press s to record, when done, press esc')
         self.root.update()
 
         keys = utils.Keyboard(Bot.dash) # initializing the class Keyboard from the module (file that houses functions (methods) and classes utils and we are passing the parameter dash
@@ -212,7 +211,7 @@ class RobotApp:
 
     def get_anchors(self):
 
-        self.ins_message('Arrow keys: move, s key: save position\n when done, press esc')
+        self.ins_message('Arrow keys: move, s key: save position, when done, press esc')
         self.root.update()
         
         Bot.enable()
@@ -443,7 +442,10 @@ class RobotApp:
             self.root.after(10, self.video_test)'''
 
     def closeall(self):
-        Bot.disable()
+        try:
+            Bot.disable()
+        except:
+            None
         root.destroy()
 
 
@@ -501,9 +503,10 @@ class RobotApp:
 class bot():  # contains the global varuiables to control the robot
 
     def __init__(self):
+
         self.dash = DobotApiDashboard('192.168.1.6', 29999) # dash is the object that is connected to the robot and gets information from the dashboard
         self.move = DobotApiMove('192.168.1.6', 30003) # the object that allows you to control the movement of the robot
-
+  
     def enable(self):
         self.dash.ClearError()
         self.dash.EnableRobot()

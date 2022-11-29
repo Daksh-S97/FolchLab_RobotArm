@@ -198,7 +198,7 @@ class Contours():
             kernel = np.ones((3,3),np.uint8)
             res = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
         else:
-            ret,res = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
+            ret,res = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV) # +cv2.THRESH_OTSU
 
         if not self.locked:
             self.get_circles(gray)
