@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 
 ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
 # Input the chessboard parameters,
-chessboardSize = (9, 7)
-frameSize = (1600, 1200)
+chessboardSize = (8, 6)
+#frameSize = (1600, 1200)
+frameSize = (2592,1944)
 
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -25,18 +26,18 @@ objpoints = []
 imgpoints = []
 
 images = sorted(glob.glob('camera_data/raw/*.png'))
-
+#print(len(images))
 for idx, image in enumerate(images):
 
     img = cv.imread(image)
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-
+    cv.imshow('image', img)
     # Find the chess board corners
     # If the findChessboardCorners() doesn't work well for you, try the
     # findChessboardCornersSB() alternative. Sometimes it proves to be more
     # robust.
-    ret, corners = cv.findChessboardCorners(gray, chessboardSize, None)
-
+    ret, corners = cv.findChessboardCornersSB(gray, chessboardSize, None)
+    #print(corners)
     # Check if the algorithm detected any chessboard in the image.
     # If either one of the images gives false, the pair will not be considered
     # for recognition of the corners.
@@ -53,6 +54,8 @@ for idx, image in enumerate(images):
 
         # Draw and display the corners
         cv.drawChessboardCorners(img, chessboardSize, cornersL, ret)
+        cv.namedWindow('Calibration',  cv.WINDOW_NORMAL) # creating a GUI window cv2 is a module called open cv which has all the methods related to computer vision
+        cv.resizeWindow('Calibration', 1348, 1011)
         cv.imshow('Calibration', img)
         cv.waitKey(2000)
     idx += 1
@@ -67,19 +70,19 @@ newCameraMatrix, roi = cv.getOptimalNewCameraMatrix(
 
 print("Camera Matrix")
 print(cameraMatrix)
-np.save('cam_matrices/cam_mtx.npy', cameraMatrix)
+np.save('cam_matrices/cam_mtx_1944.npy', cameraMatrix)
 
 print("Distortion Coeff")
 print(dist)
-np.save('cam_matrices/dist.npy', dist)
+np.save('cam_matrices/dist_1944.npy', dist)
 
 print("Region of Interest")
 print(roi)
-np.save('cam_matrices/roi.npy', roi)
+np.save('cam_matrices/roi_1944.npy', roi)
 
 print("New Camera Matrix")
 print(newCameraMatrix)
-np.save('cam_matrices/newcam_mtx.npy', newCameraMatrix)
+np.save('cam_matrices/newcam_mtx_1944.npy', newCameraMatrix)
 
 # img = cv.imread('data/image0.png')
 # dst = cv.undistort(img, cameraMatrix, dist, None, newCameraMatrix)
