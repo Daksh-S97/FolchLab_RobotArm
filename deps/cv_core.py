@@ -17,8 +17,8 @@ camera_res_dict = {
 
 class Contours():
     def __init__(self) -> None:
-        self.best_circ = [800, 600, 300] 
-        self.big_circ = [800, 600, 300]
+        self.best_circ = [1296, 972, 600] 
+        self.big_circ = [1296, 972, 600]
         self.biggest_sz = np.pi*self.big_circ[2]**2 * 0.25 / (np.pi*30**2)
         self.smallest_sz = np.pi*self.big_circ[2]**2 * 0.04 / (np.pi*30**2) 
         self.locked = False
@@ -198,7 +198,10 @@ class Contours():
             kernel = np.ones((3,3),np.uint8)
             res = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
         else:
-            ret,res = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV)
+            #ret,res = cv2.threshold(gray,125,255,cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU) # -- Uncomment this for previous version. Comment out the next 3 lines.
+            thresh = cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY_INV,29,5) 
+            kernel = np.ones((3,3),np.uint8)
+            res = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
 
         if not self.locked:
             self.get_circles(gray)
@@ -208,7 +211,8 @@ class Contours():
             result, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # We want to apply a size threshold to the contours.
-        self.singular = self.filter_contours(contours, self.smallest_sz, self.biggest_sz)
+        # self.singular = self.filter_contours(contours, self.smallest_sz, self.biggest_sz) # -- Uncomment this for previous version
+        self.singular = self.filter_contours(contours, eps, 500) # Comment this out for previous version
         self.clusters = self.filter_contours(contours, self.biggest_sz, 1000)
 
         return self.best_circ
@@ -244,6 +248,9 @@ def video_test(cap: cv2.VideoCapture) -> None:
     Args:
         cap (cv2.VideoCapture): video capture object.
     """
+
+    cv2.namedWindow('frame',  cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('frame', 1348, 1011)
     while(True):
         ret, frame = cap.read()
         cv2.imshow('frame', frame)
@@ -445,3 +452,13 @@ def cam_calibration(chessboardSize: tuple = (9, 7), frameSize: tuple = (1024, 76
     height, width, channels = img.shape
     newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(
         cameraMatrix, dist, (width, height), 1, (width, height))
+
+def calc_centers(conts):
+    centers = []
+    #print(r,a,b)
+    for i in range(len(conts)):
+        M = cv2.moments(conts[i])
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        centers.append([cX,cY])
+    return centers  

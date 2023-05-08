@@ -3,6 +3,8 @@ from deps.alarm_controller import alarm_controller_list
 import json
 import numpy as np
 from pynput import keyboard
+import math
+import collections
 
 modes_dict = {1: 'ROBOT_MODE_INIT',
 2:	'ROBOT_MODE_BRAKE_OPEN', 	
@@ -200,3 +202,33 @@ def assign_corners(coords, reverse = False):
                     'lr':lr,
                     'll':ll}
     return corners_dict
+
+
+def mindis(centers,r,a,b, tf_mtx):
+    val = 2.5
+    res = []
+    ignore = set()
+    print(len(centers))
+    dis = collections.defaultdict(lambda: np.inf)
+    
+    for i in range(len(centers)):
+        xa,ya = centers[i]
+        c_dis = math.sqrt(abs(a-xa) ** 2 + abs(b-ya) ** 2)
+        if c_dis > r:
+            ignore.add(i)
+        x,y, _ = tf_mtx @ (xa,ya,1)
+        for j in range(i+1,len(centers)):
+            xb,yb = centers[j]
+            x1,y1, _ = tf_mtx @ (xb,yb,1)
+            distance = math.sqrt(abs(x1-x) ** 2 + abs(y1-y) ** 2)
+            dis[(i, (x,y))] = min(dis[(i, (x,y))], distance)
+            dis[(j, (x1,y1))] = min(dis[(j, (x1,y1))],distance)
+                
+    dist = list(sorted(dis.items(), key = lambda item : item[1], reverse = True))
+    
+    for i in range(len(dist)):
+        if dist[i][0][0] in ignore or dist[i][1] < val:
+            continue
+        res.append(dist[i])
+    return res
+    #return list(filter(lambda x: x[1] >= val, dist))   
